@@ -12,17 +12,42 @@ struct Images {
     blue: Image<ril::Rgba>,
 }
 
+enum CollapseColor {
+    Red,
+    #[allow(dead_code)]
+    Green,
+    Blue,
+}
+
+enum CollapseMode {
+    Bitmask,
+    Heatmap,
+    Skip,
+}
+
+struct CollapseConfig {
+    red: CollapseMode,
+    green: CollapseMode,
+    blue: CollapseMode,
+}
+
 fn main() {
-    /*
+    /* About test images:
        red: cutoffs, contains three sub-colors
        green: tissue segmentation, contains one sub-color. It is a bit bigger than the others. It is not used in the app.
        blue: heatmap, contains 0-101 values for jet heatmap data.
     */
     // Prepare image locations
     let args = SourceArgs {
-        red: "../assets/001-cutoff-tricolor.png".to_string(),
+        red: "./assets/001-cutoff-tricolor.png".to_string(),
         // green: "../assets/002-tissue-seg-unused.png".to_string(),
-        blue: "../assets/000-jet-heatmap.png".to_string(),
+        blue: "./assets/000-jet-heatmap.png".to_string(),
+    };
+
+    let config = CollapseConfig {
+        red: CollapseMode::Bitmask,
+        green: CollapseMode::Skip,
+        blue: CollapseMode::Heatmap,
     };
 
     println!("Loading images...");
@@ -37,10 +62,12 @@ fn main() {
     println!("Processing images...");
     // Collapse grayscale image to single channels
     let collapsed_images = Images {
-        red: loaded_images.red.map_pixels(|pixel| collapse_to_red(pixel)),
+        red: loaded_images
+            .red
+            .map_pixels(|pixel| collapse_grey_to_color(pixel, CollapseColor::Red, &config)),
         blue: loaded_images
             .blue
-            .map_pixels(|pixel| collapse_to_blue(pixel)),
+            .map_pixels(|pixel| collapse_grey_to_color(pixel, CollapseColor::Blue, &config)),
     };
     println!("Images processed.");
 
@@ -85,7 +112,7 @@ fn main() {
     println!("Saving image...");
     // Save dat shit
     combined_image
-        .save(ril::ImageFormat::Png, "../assets/output.png")
+        .save(ril::ImageFormat::Png, "./assets/output.png")
         .expect("could not save image");
     println!("....and done!");
 }
@@ -103,24 +130,45 @@ fn bit_ize(n: u8) -> u8 {
     return (2 as u8).pow((n - 1) as u32);
 }
 
-fn collapse_to_red(pixel: ril::Rgba) -> ril::Rgba {
-    let red_original = pixel.r;
-    let result = ril::Rgba {
-        r: bit_ize(red_original),
+fn collapse_grey_to_color(
+    pixel: ril::Rgba,
+    color: CollapseColor,
+    config: &CollapseConfig,
+) -> ril::Rgba {
+    let mut result = ril::Rgba {
+        r: 0,
         g: 0,
         b: 0,
         a: 255,
     };
+
+    match color {
+        CollapseColor::Red => {
+            result.r = bit_ize_or_jet_ize(pixel.r, &config.red);
+        }
+        CollapseColor::Green => {
+            result.g = bit_ize_or_jet_ize(pixel.g, &config.green);
+        }
+        CollapseColor::Blue => {
+            result.b = bit_ize_or_jet_ize(pixel.b, &config.blue);
+        }
+    }
+
+    // remove mutability
+    let result = result;
     return result;
 }
 
-fn collapse_to_blue(pixel: ril::Rgba) -> ril::Rgba {
-    let blue_original = pixel.b;
-    let result = ril::Rgba {
-        r: 0,
-        g: 0,
-        b: blue_original,
-        a: 255,
-    };
-    return result;
+fn bit_ize_or_jet_ize(value: u8, mode: &CollapseMode) -> u8 {
+    match mode {
+        CollapseMode::Bitmask => {
+            return bit_ize(value);
+        }
+        CollapseMode::Heatmap => {
+            return value;
+        }
+        CollapseMode::Skip => {
+            return 0;
+        }
+    }
 }
