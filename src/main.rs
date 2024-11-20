@@ -1,20 +1,21 @@
+#![allow(dead_code)]
+
 use ril::Image;
 
 struct SourceArgs {
     red: String,
-    // green: String,
+    green: String,
     blue: String,
 }
 
 struct Images {
     red: Image<ril::Rgba>,
-    // green: Image<ril::Rgba>,
+    green: Image<ril::Rgba>,
     blue: Image<ril::Rgba>,
 }
 
 enum CollapseColor {
     Red,
-    #[allow(dead_code)]
     Green,
     Blue,
 }
@@ -31,6 +32,9 @@ struct CollapseConfig {
     blue: CollapseMode,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct ImgSize(u32, u32);
+
 fn main() {
     /* About test images:
        red: cutoffs, contains three sub-colors
@@ -40,13 +44,13 @@ fn main() {
     // Prepare image locations
     let args = SourceArgs {
         red: "./assets/001-cutoff-tricolor.png".to_string(),
-        // green: "../assets/002-tissue-seg-unused.png".to_string(),
+        green: "./assets/002-tissue-seg-unused.png".to_string(),
         blue: "./assets/000-jet-heatmap.png".to_string(),
     };
 
     let config = CollapseConfig {
         red: CollapseMode::Bitmask,
-        green: CollapseMode::Skip,
+        green: CollapseMode::Bitmask,
         blue: CollapseMode::Heatmap,
     };
 
@@ -54,28 +58,36 @@ fn main() {
     // Load images
     let loaded_images = Images {
         red: Image::open(args.red).expect("bad file type"),
-        // green: Image::open(args.green).expect("bad file type"),
+        green: Image::open(args.green).expect("bad file type"),
         blue: Image::open(args.blue).expect("bad file type"),
     };
+
     println!("Images loaded.");
 
-    println!("Processing images...");
-    // Collapse grayscale image to single channels
-    let collapsed_images = Images {
-        red: loaded_images
-            .red
-            .map_pixels(|pixel| collapse_grey_to_color(pixel, CollapseColor::Red, &config)),
-        blue: loaded_images
-            .blue
-            .map_pixels(|pixel| collapse_grey_to_color(pixel, CollapseColor::Blue, &config)),
-    };
-    println!("Images processed.");
+    println!("Fitting images...");
+    // Get largest image size
+    // Used for fitting all images to the same size
+    let largest_img_size = get_largest_img_size(&loaded_images);
+    match largest_img_size {
+        Ok(size) => {
+            println!("Largest image size: {:?}:{:?}", size.0, size.1);
+        }
+        Err(e) => {
+            println!("Error: {:?}", e);
+            panic!("Could not get largest image size");
+        }
+    }
 
-    println!("Creating destination image...");
-    // Initialize destination image
-    let mut combined_image = Image::new(
-        collapsed_images.red.width(),
-        collapsed_images.red.height(),
+    let largest_img_size = largest_img_size.unwrap();
+    let (max_width, max_height) = (largest_img_size.0, largest_img_size.1);
+
+    let (r_width, r_height) = (loaded_images.red.width(), loaded_images.red.height());
+    let (g_width, g_height) = (loaded_images.green.width(), loaded_images.green.height());
+    let (b_width, b_height) = (loaded_images.blue.width(), loaded_images.blue.height());
+
+    let blank_image = Image::new(
+        max_width,
+        max_height,
         ril::Rgba {
             r: 0,
             g: 0,
@@ -84,9 +96,55 @@ fn main() {
         },
     );
 
+    // Paste images onto blank images to fit
+    let mut resized_images = Images {
+        red: blank_image.clone(),
+        green: blank_image.clone(),
+        blue: blank_image.clone(),
+    };
+    println!("Large image size: {:?}:{:?}", max_width, max_height);
+    println!("Red image size: {:?}:{:?}", r_width, r_height);
+    resized_images.red.paste(
+        (max_width - r_width) / 2,
+        (max_height - r_height) / 2,
+        &loaded_images.red,
+    );
+
+    resized_images.green.paste(
+        (max_width - g_width) / 2,
+        (max_height - g_height) / 2,
+        &loaded_images.green,
+    );
+
+    resized_images.blue.paste(
+        (max_width - b_width) / 2,
+        (max_height - b_height) / 2,
+        &loaded_images.blue,
+    );
+    println!("Images fitted.");
+
+    println!("Processing images...");
+    // Collapse grayscale image to single channels
+    let collapsed_images = Images {
+        red: resized_images
+            .red
+            .map_pixels(|pixel| collapse_grey_to_color(pixel, CollapseColor::Red, &config)),
+        green: resized_images
+            .green
+            .map_pixels(|pixel| collapse_grey_to_color(pixel, CollapseColor::Green, &config)),
+        blue: resized_images
+            .blue
+            .map_pixels(|pixel| collapse_grey_to_color(pixel, CollapseColor::Blue, &config)),
+    };
+    println!("Images processed.");
+
+    println!("Creating destination image...");
+    // Initialize destination image
+    let mut combined_image = blank_image.clone();
+
     println!("Combining pixel data...");
     // Map over destination image and combine red and blue channels
-    combined_image = combined_image.map_pixels_with_coords(|x, y, p| {
+    combined_image = combined_image.map_pixels_with_coords(|x, y, _p| {
         let red_px = collapsed_images.red.get_pixel(x, y).unwrap_or(&ril::Rgba {
             r: 0,
             g: 0,
@@ -99,9 +157,18 @@ fn main() {
             b: 0,
             a: 255,
         });
+        let green_px = collapsed_images
+            .green
+            .get_pixel(x, y)
+            .unwrap_or(&ril::Rgba {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 255,
+            });
         let new_px = ril::Rgba {
             r: red_px.r,
-            g: p.g,
+            g: green_px.g,
             b: blue_px.b,
             a: 255,
         };
@@ -115,6 +182,37 @@ fn main() {
         .save(ril::ImageFormat::Png, "./assets/output.png")
         .expect("could not save image");
     println!("....and done!");
+}
+
+fn get_largest_img_size(images: &Images) -> Result<ImgSize, std::io::Error> {
+    let heights = vec![
+        images.red.height(),
+        images.green.height(),
+        images.blue.height(),
+    ];
+
+    let widths = vec![
+        images.red.width(),
+        images.green.width(),
+        images.blue.width(),
+    ];
+
+    let max_height_opt = heights.iter().max().copied();
+    let max_width_opt = widths.iter().max().copied();
+
+    let max_height: u32;
+    let max_width: u32;
+
+    match max_height_opt {
+        Some(v) => max_height = v,
+        None => return Err(std::io::Error::other("images have no max size")),
+    }
+    match max_width_opt {
+        Some(v) => max_width = v,
+        None => return Err(std::io::Error::other("images have no max size")),
+    }
+
+    return Ok(ImgSize(max_width, max_height));
 }
 
 fn bit_ize(n: u8) -> u8 {
