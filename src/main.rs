@@ -1,6 +1,10 @@
 #![allow(dead_code)]
 
+use clap::Parser;
 use ril::Image;
+use std::path::Path;
+
+mod app;
 
 struct SourceArgs {
     red: String,
@@ -36,16 +40,35 @@ struct CollapseConfig {
 struct ImgSize(u32, u32);
 
 fn main() {
+    let cli: app::Cli = app::Cli::parse();
+    println!("{:?}", cli.red_channel_file_path);
+    println!("{:?}", cli.green_channel_file_path);
+    println!("{:?}", cli.blue_channel_file_path);
+    println!("{:?}", cli.output_file);
+
     /* About test images:
        red: cutoffs, contains three sub-colors
        green: tissue segmentation, contains one sub-color. It is a bit bigger than the others. It is not used in the app.
        blue: heatmap, contains 0-101 values for jet heatmap data.
     */
+    println!(
+        "Red file exists: {}",
+        Path::new(&cli.red_channel_file_path).exists()
+    );
+    println!(
+        "Green file exists: {}",
+        Path::new(&cli.green_channel_file_path).exists()
+    );
+    println!(
+        "Blue file exists: {}",
+        Path::new(&cli.blue_channel_file_path).exists()
+    );
+
     // Prepare image locations
     let args = SourceArgs {
-        red: "./assets/001-cutoff-tricolor.png".to_string(),
-        green: "./assets/002-tissue-seg-unused.png".to_string(),
-        blue: "./assets/000-jet-heatmap.png".to_string(),
+        red: cli.red_channel_file_path,
+        green: cli.green_channel_file_path,
+        blue: cli.blue_channel_file_path,
     };
 
     let config = CollapseConfig {
@@ -57,9 +80,9 @@ fn main() {
     println!("Loading images...");
     // Load images
     let loaded_images = Images {
-        red: Image::open(args.red).expect("bad file type"),
-        green: Image::open(args.green).expect("bad file type"),
-        blue: Image::open(args.blue).expect("bad file type"),
+        red: Image::open(args.red).expect("Error loading image: "),
+        green: Image::open(args.green).expect("Error loading image: "),
+        blue: Image::open(args.blue).expect("Error loading image: "),
     };
 
     println!("Images loaded.");
@@ -179,7 +202,7 @@ fn main() {
     println!("Saving image...");
     // Save dat shit
     combined_image
-        .save(ril::ImageFormat::Png, "./assets/output.png")
+        .save(ril::ImageFormat::Png, cli.output_file)
         .expect("could not save image");
     println!("....and done!");
 }

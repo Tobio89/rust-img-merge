@@ -1,3 +1,4 @@
 /target
 /assets/*
 .DS_Store
+output.png
