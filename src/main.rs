@@ -79,6 +79,12 @@ struct ImgSize(u32, u32);
 fn main() {
     let cli: app::Cli = app::Cli::parse();
 
+    let dry_run = cli.dry_run;
+
+    if dry_run {
+        println!("Dry run enabled! No files will be saved.");
+    }
+
     /* About test images:
        red: cutoffs, contains three sub-colors
        green: tissue segmentation, contains one sub-color. It is a bit bigger than the others. It is not used in the app.
@@ -155,6 +161,11 @@ fn main() {
 
     let largest_img_size = largest_img_size;
     let (max_width, max_height) = (largest_img_size.0, largest_img_size.1);
+
+    if dry_run {
+        println!("Dry run complete.");
+        return;
+    }
 
     let blank_image = Image::new(
         max_width,
@@ -432,5 +443,33 @@ bbox
 - find out the largest image
 - take the largest image's offset, and minus
 
+
+*/
+
+/*
+It still doesn't fit.
+The issue is that the images are not being scaled correctly.
+The different sizes of source images, and the different bboxes, point to the fact that different images can be downscaled to different amounts.
+An image downscaled by more than another, needs to be scaled up to fit the other images.
+I need to figure out the value that lets me scale between one downscale value and another.
+
+*/
+
+/*
+
+Looking into this again.
+
+It would be ideal to position all images based on a a consistent downscale, and a consistent bbox relative to the WSI.
+
+I should pick a single image to be the reference image, and then scale all other images to fit that image.
+I should then make a destination image that is the size of the WSI at that downscale
+Then I should paste all images onto that image, using the bbox to position them correctly.
+
+1 - figure out the lowest downscale value
+2 - figure out the scale value for any image that doesn't match
+3 - scale other images to match that scale
+
+4 - create an empty image that is the size of the WSI at that scale
+5 - paste images onto that image, using the bbox to position them correctly.
 
 */
