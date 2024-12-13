@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use clap::{builder::PossibleValue, Parser, ValueEnum};
+use core::f32;
 use ril::Image;
 use std::path::Path;
 
@@ -66,15 +67,29 @@ struct ImageBBoxes {
     green: BBox,
     blue: BBox,
 }
-
+struct ImageDownscalePosition {
+    full_size: ImgSize,
+    full_bbox: BBox,
+    scaled_size: ImgSize,
+    scaled_offset: ImgSize,
+    scale: ImgScale,
+}
 struct ImageOffsets {
-    red: ImgSize,
-    green: ImgSize,
-    blue: ImgSize,
+    red: ImageDownscalePosition,
+    green: ImageDownscalePosition,
+    blue: ImageDownscalePosition,
 }
 
-#[derive(Debug, Clone, Copy)]
+struct PreparedImagePosition {
+    target_size: ImgSize,
+    target_offset: ImgSize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct ImgSize(u32, u32);
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ImgScale(f32, f32);
 
 fn main() {
     let cli: app::Cli = app::Cli::parse();
@@ -123,6 +138,8 @@ fn main() {
         blue: validate_bbox(cli.blue_bbox).expect("Invalid blue bbox"),
     };
 
+    let original = validate_original_size(cli.source_dim).expect("Invalid source dimensions");
+
     println!("Loading images...");
     // Load images
     let loaded_images = Images {
@@ -149,27 +166,66 @@ fn main() {
         ),
     };
 
-    let min_offsets = get_minimum_offsets(&image_offsets).expect("Could not get minimum offsets");
+    // # The image that is the largest / the image that has been downscaled the least
+    let minimum_downscale =
+        get_minimum_downscale(&image_offsets).expect("Could not get minimum downscale");
 
-    println!("Images loaded.");
+    println!("Minimum downscale: {:?}", minimum_downscale);
 
-    println!("Fitting images...");
-    // Get largest image size
-    // Used for fitting all images to the same size
-    let largest_img_size =
-        get_largest_img_size(&loaded_images).expect("Could not get largest image size");
+    let downscaled_original_size = get_downscaled_size_of_original(original, minimum_downscale);
 
-    let largest_img_size = largest_img_size;
-    let (max_width, max_height) = (largest_img_size.0, largest_img_size.1);
+    println!("Downscaled original size: {:?}", downscaled_original_size);
+
+    let is_red_same_scale = image_offsets.red.scale == minimum_downscale;
+    let is_green_same_scale = image_offsets.green.scale == minimum_downscale;
+    let is_blue_same_scale = image_offsets.blue.scale == minimum_downscale;
+
+    println!("Red same scale: {:?}", is_red_same_scale);
+    println!("Green same scale: {:?}", is_green_same_scale);
+    println!("Blue same scale: {:?}", is_blue_same_scale);
+
+    let red_channel_target_size = {
+        if is_red_same_scale {
+            PreparedImagePosition {
+                target_size: image_offsets.red.scaled_size,
+                target_offset: image_offsets.red.scaled_offset,
+            }
+        } else {
+            calculate_target_size_for_scaled_image(image_offsets.red, minimum_downscale)
+        }
+    };
+
+    let green_channel_target_size = {
+        if is_green_same_scale {
+            PreparedImagePosition {
+                target_size: image_offsets.green.scaled_size,
+                target_offset: image_offsets.green.scaled_offset,
+            }
+        } else {
+            calculate_target_size_for_scaled_image(image_offsets.green, minimum_downscale)
+        }
+    };
+
+    let blue_channel_target_size = {
+        if is_blue_same_scale {
+            PreparedImagePosition {
+                target_size: image_offsets.blue.scaled_size,
+                target_offset: image_offsets.blue.scaled_offset,
+            }
+        } else {
+            calculate_target_size_for_scaled_image(image_offsets.blue, minimum_downscale)
+        }
+    };
 
     if dry_run {
         println!("Dry run complete.");
         return;
     }
 
+    // Create blank image, downscaled to the lowest downscale value
     let blank_image = Image::new(
-        max_width,
-        max_height,
+        downscaled_original_size.0,
+        downscaled_original_size.1,
         ril::Rgba {
             r: 0,
             g: 0,
@@ -178,44 +234,79 @@ fn main() {
         },
     );
 
-    // Paste images onto blank images to fit
-    let mut resized_images = Images {
+    let mut destination_channels = Images {
         red: blank_image.clone(),
         green: blank_image.clone(),
         blue: blank_image.clone(),
     };
-    // println!("Large image size: {:?}:{:?}", max_width, max_height);
-    // println!("Red image size: {:?}:{:?}", r_width, r_height);
 
-    resized_images.red.paste(
-        image_offsets.red.0 - min_offsets.0,
-        image_offsets.red.1 - min_offsets.1,
-        &loaded_images.red,
+    // Either creates a resized copy of the image, or just clones it if it's already the right size
+    let resized_images = Images {
+        red: {
+            if !is_red_same_scale {
+                loaded_images.red.resized(
+                    red_channel_target_size.target_size.0,
+                    red_channel_target_size.target_size.1,
+                    ril::ResizeAlgorithm::Nearest,
+                )
+            } else {
+                loaded_images.red.clone()
+            }
+        },
+        green: {
+            if !is_green_same_scale {
+                loaded_images.green.resized(
+                    green_channel_target_size.target_size.0,
+                    green_channel_target_size.target_size.1,
+                    ril::ResizeAlgorithm::Nearest,
+                )
+            } else {
+                loaded_images.green.clone()
+            }
+        },
+        blue: {
+            if !is_blue_same_scale {
+                loaded_images.blue.resized(
+                    blue_channel_target_size.target_size.0,
+                    blue_channel_target_size.target_size.1,
+                    ril::ResizeAlgorithm::Nearest,
+                )
+            } else {
+                loaded_images.blue.clone()
+            }
+        },
+    };
+
+    // // Paste images onto blank images to fit
+    destination_channels.red.paste(
+        red_channel_target_size.target_offset.0,
+        red_channel_target_size.target_offset.1,
+        &resized_images.red,
     );
 
-    resized_images.green.paste(
-        image_offsets.green.0 - min_offsets.0,
-        image_offsets.green.1 - min_offsets.1,
-        &loaded_images.green,
+    destination_channels.green.paste(
+        green_channel_target_size.target_offset.0,
+        green_channel_target_size.target_offset.1,
+        &resized_images.green,
     );
 
-    resized_images.blue.paste(
-        image_offsets.blue.0 - min_offsets.0,
-        image_offsets.blue.1 - min_offsets.1,
-        &loaded_images.blue,
+    destination_channels.blue.paste(
+        blue_channel_target_size.target_offset.0,
+        blue_channel_target_size.target_offset.1,
+        &resized_images.blue,
     );
     println!("Images fitted.");
 
     println!("Processing images...");
     // Collapse grayscale image to single channels
     let collapsed_images = Images {
-        red: resized_images
+        red: destination_channels
             .red
             .map_pixels(|pixel| collapse_grey_to_color(pixel, CollapseColor::Red, &config)),
-        green: resized_images
+        green: destination_channels
             .green
             .map_pixels(|pixel| collapse_grey_to_color(pixel, CollapseColor::Green, &config)),
-        blue: resized_images
+        blue: destination_channels
             .blue
             .map_pixels(|pixel| collapse_grey_to_color(pixel, CollapseColor::Blue, &config)),
     };
@@ -298,27 +389,30 @@ fn get_largest_img_size(images: &Images) -> Result<ImgSize, std::io::Error> {
     return Ok(ImgSize(max_width, max_height));
 }
 
-fn get_minimum_offsets(offsets: &ImageOffsets) -> Result<ImgSize, std::io::Error> {
-    let x_offsets = vec![offsets.red.0, offsets.green.0, offsets.blue.0];
+fn get_minimum_downscale(offsets: &ImageOffsets) -> Result<ImgScale, std::io::Error> {
+    let x_scales = vec![
+        offsets.red.scale.0,
+        offsets.green.scale.0,
+        offsets.blue.scale.0,
+    ];
 
-    let y_offsets = vec![offsets.red.1, offsets.green.1, offsets.blue.1];
+    let y_scales = vec![
+        offsets.red.scale.1,
+        offsets.green.scale.1,
+        offsets.blue.scale.1,
+    ];
 
-    let min_x_offset = x_offsets.iter().min().copied();
-    let min_y_offset = y_offsets.iter().min().copied();
+    let min_x_offset = x_scales.iter().fold(f32::INFINITY, |a, &b| a.min(b));
+    let min_y_offset = y_scales.iter().fold(f32::INFINITY, |a, &b| a.min(b));
 
-    let min_x: u32;
-    let min_y: u32;
+    return Ok(ImgScale(min_x_offset, min_y_offset));
+}
 
-    match min_x_offset {
-        Some(v) => min_x = v,
-        None => return Err(std::io::Error::other("offsets have no minimum")),
-    }
-    match min_y_offset {
-        Some(v) => min_y = v,
-        None => return Err(std::io::Error::other("offsets have no minimum")),
-    }
+fn get_downscaled_size_of_original(original: ImgSize, downscale: ImgScale) -> ImgSize {
+    let new_width = ((original.0 as f32) / downscale.0) as u32;
+    let new_height = ((original.1 as f32) / downscale.1) as u32;
 
-    return Ok(ImgSize(min_x, min_y));
+    return ImgSize(new_width, new_height);
 }
 
 fn bit_ize(n: u8) -> u8 {
@@ -398,7 +492,21 @@ fn validate_bbox(bbox: Vec<u32>) -> Result<BBox, std::io::Error> {
     });
 }
 
-fn calculate_img_offset(img_height: u32, img_width: u32, img_bbox: BBox) -> ImgSize {
+fn validate_original_size(size: Vec<u32>) -> Result<ImgSize, std::io::Error> {
+    if size.len() != 2 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "size must have 2 values",
+        ));
+    }
+
+    let width = size[0];
+    let height = size[1];
+
+    return Ok(ImgSize(width, height));
+}
+
+fn calculate_img_offset(img_height: u32, img_width: u32, img_bbox: BBox) -> ImageDownscalePosition {
     // The deal is this:
     // The BBOX is relative to the full size of the image.
     // We need to calculate the full size of the image, and then we can figure out what the image's downscale value is.
@@ -433,7 +541,32 @@ fn calculate_img_offset(img_height: u32, img_width: u32, img_bbox: BBox) -> ImgS
 
     println!("Scaled bbox: {:?}:{:?}", scaled_bbox_x, scaled_bbox_y);
 
-    return ImgSize(scaled_bbox_x, scaled_bbox_y);
+    return ImageDownscalePosition {
+        full_size: ImgSize(true_width, true_height),
+        full_bbox: img_bbox,
+        scaled_size: ImgSize(img_width, img_height),
+        scaled_offset: ImgSize(scaled_bbox_x, scaled_bbox_y),
+        scale: ImgScale(downscale_x, downscale_y),
+    };
+}
+
+fn calculate_target_size_for_scaled_image(
+    image: ImageDownscalePosition,
+    target_scale: ImgScale,
+) -> PreparedImagePosition {
+    let target_width = (image.full_size.0 as f32) / target_scale.0;
+    let target_height = (image.full_size.1 as f32) / target_scale.1;
+
+    return PreparedImagePosition {
+        target_size: ImgSize(target_width.round() as u32, target_height.round() as u32),
+        target_offset: ImgSize(
+            ((image.full_bbox.min_x as f32) / target_scale.0).round() as u32,
+            ((image.full_bbox.min_y as f32) / target_scale.1).round() as u32,
+        ),
+    };
+
+    // RIL resize needs a target size, not a scale value, so I should return the target size
+    // I also need to know what the new offset is.
 }
 
 /*
