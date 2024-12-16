@@ -138,6 +138,7 @@ fn main() {
         blue: validate_bbox(cli.blue_bbox).expect("Invalid blue bbox"),
     };
 
+    // Make sure that the CLI source dimensions are a vector of 2.
     let original = validate_original_size(cli.source_dim).expect("Invalid source dimensions");
 
     println!("Loading images...");
@@ -358,6 +359,10 @@ fn main() {
     println!("....and done!");
 }
 
+/// # Get largest image size
+/// Given a struct of images, return the width and height of the largest image.
+///
+/// This function is used to figure out which image has been down-scaled the least.
 fn get_largest_img_size(images: &Images) -> Result<ImgSize, std::io::Error> {
     let heights = vec![
         images.red.height(),
@@ -389,6 +394,10 @@ fn get_largest_img_size(images: &Images) -> Result<ImgSize, std::io::Error> {
     return Ok(ImgSize(max_width, max_height));
 }
 
+/// # Get minimum downscale
+/// Given a struct of ImageOffsets (image sizing information), return the value of the smallest downscale.
+///
+/// This function is used to figure out which image has been down-scaled the least, which is used as the basis for resizing other images.
 fn get_minimum_downscale(offsets: &ImageOffsets) -> Result<ImgScale, std::io::Error> {
     let x_scales = vec![
         offsets.red.scale.0,
@@ -408,6 +417,10 @@ fn get_minimum_downscale(offsets: &ImageOffsets) -> Result<ImgScale, std::io::Er
     return Ok(ImgScale(min_x_offset, min_y_offset));
 }
 
+/// # Get downscaled size of original
+/// Given the size of the original image, and a chosen downscale, return the size of the image after downscaling.
+///
+/// This function is used to calculate the size of the output when downscaled to match the other images.
 fn get_downscaled_size_of_original(original: ImgSize, downscale: ImgScale) -> ImgSize {
     let new_width = ((original.0 as f32) / downscale.0) as u32;
     let new_height = ((original.1 as f32) / downscale.1) as u32;
@@ -415,6 +428,14 @@ fn get_downscaled_size_of_original(original: ImgSize, downscale: ImgScale) -> Im
     return ImgSize(new_width, new_height);
 }
 
+/// # bit-ize
+/// Given an 8-bit number, return the nearest power of 2.
+///
+/// This function is used to convert an indexed colour to a bitmasked colour.
+///
+/// If a pixel value is 3 (the third indexed colour), it will return 4, the bitmasked value for that colour.
+///
+/// Bitmasked values can be combined to create a new number that can be deconstructed back into the original colours.
 fn bit_ize(n: u8) -> u8 {
     if n == 0 {
         return 0;
@@ -428,6 +449,12 @@ fn bit_ize(n: u8) -> u8 {
     return (2 as u8).pow((n - 1) as u32);
 }
 
+/// # Collapse grey to color
+/// Given a ril::Rgba pixel, a CollapseColor, and a CollapseConfig, return a new ril::Rgba pixel
+///
+/// This function is used to collapse a grey (rgb) pixel value into a single channel.
+///
+/// By passing in CollapseConfig, it is possible to choose to bitmask the value or use it as a heatmap.
 fn collapse_grey_to_color(
     pixel: ril::Rgba,
     color: CollapseColor,
@@ -457,6 +484,12 @@ fn collapse_grey_to_color(
     return result;
 }
 
+/// # Bit-ize or jet-ize
+/// Given an 8-bit number and a CollapseMode, return a new 8-bit number.
+///
+/// This function is used to convert an indexed colour to a bitmasked colour, or to leave it as a heatmap value.
+///
+/// It can also skip the value entirely by returning 0.
 fn bit_ize_or_jet_ize(value: u8, mode: &CollapseMode) -> u8 {
     match mode {
         CollapseMode::Bitmask => {
@@ -470,7 +503,10 @@ fn bit_ize_or_jet_ize(value: u8, mode: &CollapseMode) -> u8 {
         }
     }
 }
-
+/// # Validate BBox
+/// Given a Vec<u32>, return a BBox.
+///
+/// This function is used to check that the bbox options passed into the CLI are valid.
 fn validate_bbox(bbox: Vec<u32>) -> Result<BBox, std::io::Error> {
     if bbox.len() != 4 {
         return Err(std::io::Error::new(
@@ -492,6 +528,10 @@ fn validate_bbox(bbox: Vec<u32>) -> Result<BBox, std::io::Error> {
     });
 }
 
+/// # Validate Original Size
+/// Given a Vec<u32>, return ImgSize.
+///
+/// This function is used to check that the original image size option passed into the CLI is valid.
 fn validate_original_size(size: Vec<u32>) -> Result<ImgSize, std::io::Error> {
     if size.len() != 2 {
         return Err(std::io::Error::new(
@@ -507,13 +547,6 @@ fn validate_original_size(size: Vec<u32>) -> Result<ImgSize, std::io::Error> {
 }
 
 fn calculate_img_offset(img_height: u32, img_width: u32, img_bbox: BBox) -> ImageDownscalePosition {
-    // The deal is this:
-    // The BBOX is relative to the full size of the image.
-    // We need to calculate the full size of the image, and then we can figure out what the image's downscale value is.
-    // When we know the downscale, we can figure out the true offset for the image
-    // We will need to return a bbox that is relative to the scaled size of the image
-    // Then maybe we can get the images to be positioned correctly.
-
     println!(
         "Bbox: min-x {:?}, min-y {:?}, max-x {:?}, max-y {:?}",
         img_bbox.min_x, img_bbox.min_y, img_bbox.max_x, img_bbox.max_y
