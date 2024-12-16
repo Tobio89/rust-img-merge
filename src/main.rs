@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use clap::{builder::PossibleValue, Parser, ValueEnum};
 use core::f32;
 use ril::Image;
@@ -167,24 +165,23 @@ fn main() {
         ),
     };
 
-    // # The image that is the largest / the image that has been downscaled the least
+    // The image that is the largest / the image that has been downscaled the least
     let minimum_downscale =
         get_minimum_downscale(&image_offsets).expect("Could not get minimum downscale");
 
     println!("Minimum downscale: {:?}", minimum_downscale);
 
+    // The size of the source image if it were downscaled to the minimum downscale
     let downscaled_original_size = get_downscaled_size_of_original(original, minimum_downscale);
 
     println!("Downscaled original size: {:?}", downscaled_original_size);
 
+    // Whether or not the images are already at the same scale
     let is_red_same_scale = image_offsets.red.scale == minimum_downscale;
     let is_green_same_scale = image_offsets.green.scale == minimum_downscale;
     let is_blue_same_scale = image_offsets.blue.scale == minimum_downscale;
 
-    println!("Red same scale: {:?}", is_red_same_scale);
-    println!("Green same scale: {:?}", is_green_same_scale);
-    println!("Blue same scale: {:?}", is_blue_same_scale);
-
+    // The target size for each image - either its existing size, or a new size according to the minimum downscale
     let red_channel_target_size = {
         if is_red_same_scale {
             PreparedImagePosition {
@@ -223,7 +220,7 @@ fn main() {
         return;
     }
 
-    // Create blank image, downscaled to the lowest downscale value
+    // Create blank image to paste onto
     let blank_image = Image::new(
         downscaled_original_size.0,
         downscaled_original_size.1,
@@ -235,6 +232,7 @@ fn main() {
         },
     );
 
+    // Copy blank image for each channel
     let mut destination_channels = Images {
         red: blank_image.clone(),
         green: blank_image.clone(),
@@ -278,7 +276,7 @@ fn main() {
         },
     };
 
-    // // Paste images onto blank images to fit
+    // Paste images onto blank images to fit
     destination_channels.red.paste(
         red_channel_target_size.target_offset.0,
         red_channel_target_size.target_offset.1,
@@ -314,8 +312,9 @@ fn main() {
     println!("Images processed.");
 
     println!("Creating destination image...");
+
     // Initialize destination image
-    let mut combined_image = blank_image.clone();
+    let mut combined_image = blank_image;
 
     println!("Combining pixel data...");
     // Map over destination image and combine red and blue channels
@@ -359,41 +358,6 @@ fn main() {
     println!("....and done!");
 }
 
-/// # Get largest image size
-/// Given a struct of images, return the width and height of the largest image.
-///
-/// This function is used to figure out which image has been down-scaled the least.
-fn get_largest_img_size(images: &Images) -> Result<ImgSize, std::io::Error> {
-    let heights = vec![
-        images.red.height(),
-        images.green.height(),
-        images.blue.height(),
-    ];
-
-    let widths = vec![
-        images.red.width(),
-        images.green.width(),
-        images.blue.width(),
-    ];
-
-    let max_height_opt = heights.iter().max().copied();
-    let max_width_opt = widths.iter().max().copied();
-
-    let max_height: u32;
-    let max_width: u32;
-
-    match max_height_opt {
-        Some(v) => max_height = v,
-        None => return Err(std::io::Error::other("images have no max size")),
-    }
-    match max_width_opt {
-        Some(v) => max_width = v,
-        None => return Err(std::io::Error::other("images have no max size")),
-    }
-
-    return Ok(ImgSize(max_width, max_height));
-}
-
 /// # Get minimum downscale
 /// Given a struct of ImageOffsets (image sizing information), return the value of the smallest downscale.
 ///
@@ -435,7 +399,7 @@ fn get_downscaled_size_of_original(original: ImgSize, downscale: ImgScale) -> Im
 ///
 /// If a pixel value is 3 (the third indexed colour), it will return 4, the bitmasked value for that colour.
 ///
-/// Bitmasked values can be combined to create a new number that can be deconstructed back into the original colours.
+/// / Bitmasked values can be combined to create a new number that can be deconstructed back into the original colours.
 fn bit_ize(n: u8) -> u8 {
     if n == 0 {
         return 0;
@@ -453,6 +417,8 @@ fn bit_ize(n: u8) -> u8 {
 /// Given a ril::Rgba pixel, a CollapseColor, and a CollapseConfig, return a new ril::Rgba pixel
 ///
 /// This function is used to collapse a grey (rgb) pixel value into a single channel.
+///
+/// For example, a pixel of (5, 5, 5) can be collapsed into the red channel (5, 0, 0)
 ///
 /// By passing in CollapseConfig, it is possible to choose to bitmask the value or use it as a heatmap.
 fn collapse_grey_to_color(
@@ -546,33 +512,19 @@ fn validate_original_size(size: Vec<u32>) -> Result<ImgSize, std::io::Error> {
     return Ok(ImgSize(width, height));
 }
 
+/// # Calculate Img Offset
+/// Given an image height, image width, and a BBox, return an ImageDownscalePosition.
+///
+/// This function produces an ImageDownscalePosition, which contains information about the image's size, offset, and scale, in both full and scaled versions.
 fn calculate_img_offset(img_height: u32, img_width: u32, img_bbox: BBox) -> ImageDownscalePosition {
-    println!(
-        "Bbox: min-x {:?}, min-y {:?}, max-x {:?}, max-y {:?}",
-        img_bbox.min_x, img_bbox.min_y, img_bbox.max_x, img_bbox.max_y
-    );
-
     let true_width = img_bbox.max_x - img_bbox.min_x;
     let true_height = img_bbox.max_y - img_bbox.min_y;
 
-    println!(
-        "True width: {:?}, True height: {:?}",
-        true_width, true_height
-    );
-
-    // Should these be floats?
     let downscale_x: f32 = (true_width as f32 / img_width as f32) as f32;
     let downscale_y: f32 = (true_height as f32 / img_height as f32) as f32;
 
-    println!(
-        "Downscale x: {:?}, Downscale y: {:?}",
-        downscale_x, downscale_y
-    );
-
     let scaled_bbox_x = ((img_bbox.min_x as f32) / downscale_x).round() as u32;
     let scaled_bbox_y = ((img_bbox.min_y as f32) / downscale_y).round() as u32;
-
-    println!("Scaled bbox: {:?}:{:?}", scaled_bbox_x, scaled_bbox_y);
 
     return ImageDownscalePosition {
         full_size: ImgSize(true_width, true_height),
@@ -583,6 +535,12 @@ fn calculate_img_offset(img_height: u32, img_width: u32, img_bbox: BBox) -> Imag
     };
 }
 
+/// # Calculate Target Size for Scaled Image
+/// Given an ImageDownscalePosition and an ImgScale, return a PreparedImagePosition.
+///
+/// This function takes the data for a downscaled image, and a target scale, and returns the target size and offset for the image to be resized to.
+///
+/// This is because when resizing with RIL, you need to provide a target size, not a scale value.
 fn calculate_target_size_for_scaled_image(
     image: ImageDownscalePosition,
     target_scale: ImgScale,
@@ -597,45 +555,4 @@ fn calculate_target_size_for_scaled_image(
             ((image.full_bbox.min_y as f32) / target_scale.1).round() as u32,
         ),
     };
-
-    // RIL resize needs a target size, not a scale value, so I should return the target size
-    // I also need to know what the new offset is.
 }
-
-/*
-bbox
-
-- find out scaled offsets for each image.
-- find out the largest image
-- take the largest image's offset, and minus
-
-
-*/
-
-/*
-It still doesn't fit.
-The issue is that the images are not being scaled correctly.
-The different sizes of source images, and the different bboxes, point to the fact that different images can be downscaled to different amounts.
-An image downscaled by more than another, needs to be scaled up to fit the other images.
-I need to figure out the value that lets me scale between one downscale value and another.
-
-*/
-
-/*
-
-Looking into this again.
-
-It would be ideal to position all images based on a a consistent downscale, and a consistent bbox relative to the WSI.
-
-I should pick a single image to be the reference image, and then scale all other images to fit that image.
-I should then make a destination image that is the size of the WSI at that downscale
-Then I should paste all images onto that image, using the bbox to position them correctly.
-
-1 - figure out the lowest downscale value
-2 - figure out the scale value for any image that doesn't match
-3 - scale other images to match that scale
-
-4 - create an empty image that is the size of the WSI at that scale
-5 - paste images onto that image, using the bbox to position them correctly.
-
-*/
