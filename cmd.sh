@@ -1,2 +1,2 @@
-cargo run -- --red-path ./assets/001-cutoff-tricolor.png --green-path ./assets/002-tissue-seg-unused.png --blue-path ./assets/000-jet-heatmap.png --blue-mode "heatmap" --red-bbox 0 6053 71698 89222  --green-bbox 0 1593 71685 89208 --blue-bbox  0 6053 71698 89222 --source-dimensions 81920 100352 --out ./output_01.png
+cargo run -- --red-path ./assets/case-02/cutoff_map.png --green-path ./assets/case-02/tissue_argmax.png --blue-path ./assets/case-02/score_image.png --blue-mode "heatmap" --red-bbox 4526 4526 31776 34814  --green-bbox 4539 4539 31774 34800 --blue-bbox  4526 4526 31776 34814 --source-dimensions 37028 35637 --out ./output_02.png
 
