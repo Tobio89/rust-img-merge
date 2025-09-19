@@ -5,6 +5,7 @@ A Rust CLI utility for merging PNG images into a bitmasked image, ready for tili
 Run the app with `cargo run`.
 
 The arguments required are:
+
 ```
   --red-path <RED_CHANNEL_FILE_PATH>
   --green-path <GREEN_CHANNEL_FILE_PATH>
@@ -15,4 +16,7 @@ The arguments required are:
   --source-dimensions <SOURCE_DIM> <SOURCE_DIM>
   --out <OUTPUT_FILE>
 ```
+
 You can also use `--dry-run` to specify a dry run that doesn't write a file.
+
+For convenience, you can use `./cmd.sh` to run a pre-prepared command, which will produce a file based on the example assets provided.
