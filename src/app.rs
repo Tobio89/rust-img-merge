@@ -1,11 +1,25 @@
-use clap::{command, Parser};
+use clap::{command, Parser, Subcommand};
 
-use crate::CollapseMode;
+use crate::bitmask_mode::CollapseMode;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 #[command(propagate_version = true)]
 pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Subcommand)]
+pub enum Commands {
+    BitmaskMode(BitmaskModeArgs),
+    DZISplitMode(DZISplitModeArgs),
+}
+
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+#[command(propagate_version = true)]
+pub struct BitmaskModeArgs {
     #[arg(short, long = "dry-run", value_parser, default_value = "false")]
     pub dry_run: bool,
     /// Paths to source images
@@ -43,4 +57,27 @@ pub struct Cli {
     /// The output file name
     #[arg(short, long = "out", default_value = "./output.png", required = true)]
     pub output_file: String,
+}
+
+
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+#[command(propagate_version = true)]
+pub struct DZISplitModeArgs {
+
+    /// Path to source image
+    #[arg(short, long = "input-image", required = true)]
+    pub input_image: String,
+
+    /// The output file name stem
+    #[arg(short = 's', long = "output-file-stem", default_value = "dzi")]
+    pub output_file_stem: String,
+
+    /// The output folder
+    #[arg(short, long = "output-folder", default_value = "output")]
+    pub output_folder: String,
+
+    /// DZI tile size   
+    #[arg(short, long = "tile-size", default_value = "256")]
+    pub tile_size: u32,
 }
