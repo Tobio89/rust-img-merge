@@ -85,22 +85,35 @@ pub fn do_dzi_split_mode(cli: app::DZISplitModeArgs) {
 
     */
 
-    let next_layer = dzi_dimensions.zoom_levels - 1;
+    let mut next_layer = dzi_dimensions.zoom_levels - 1;
+
+
+
 
     // If 0, it's all layers. Else, do the target layer only
-    if layer_to_prepare == 0 || layer_to_prepare == next_layer {
+    if layer_to_prepare == 0 {
 
         // previous layer's dimensions, so we can get the tiles correctly
-        let layer_cols = dzi_dimensions.cols;
-        let layer_rows = dzi_dimensions.rows;
+        let mut layer_cols = dzi_dimensions.cols;
+        let mut layer_rows = dzi_dimensions.rows;
 
-        // just do one layer for testing
-        println!("Preparing scaled layer {}...", next_layer);
-        let start_time = Instant::now();
-        prepare_scaled_layer(next_layer, &output_file_stem, tile_size, &output_folder, layer_cols, layer_rows);
-        let end_time = Instant::now();
-        println!("Layer {} prepared in {:?}", next_layer, end_time.duration_since(start_time));
+        for i in (0..next_layer).rev() {
+            // just do one layer for testing
+            println!("Preparing scaled layer {}...", next_layer);
+            let start_time = Instant::now();
+            prepare_scaled_layer(next_layer, &output_file_stem, tile_size, &output_folder, layer_cols, layer_rows);
+            let end_time = Instant::now();
+            println!("Layer {} prepared in {:?}", next_layer, end_time.duration_since(start_time));
 
+            layer_cols = layer_cols.div_ceil(2);
+            layer_rows = layer_rows.div_ceil(2);
+            next_layer = i;
+
+            if layer_cols < 1 || layer_rows < 1{
+                println!("Layer {} is too small, stopping.", next_layer);
+                break;
+            }
+        }
     }
 }
 
@@ -175,7 +188,7 @@ fn prepare_scaled_tile(level: u32, x:u32, y:u32, prefix: &str, tile_size:u32, ou
     new_image.paste(0, tile_size, &bottom_left);
     new_image.paste(tile_size, tile_size, &bottom_right);
 
-    new_image.resize(tile_size, tile_size, ril::ResizeAlgorithm::Nearest);
+    new_image.resize(tile_size, tile_size, ril::ResizeAlgorithm::Bilinear);
     return new_image;
 }
 
