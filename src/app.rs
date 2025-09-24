@@ -80,4 +80,9 @@ pub struct DZISplitModeArgs {
     /// DZI tile size   
     #[arg(short, long = "tile-size", default_value = "256")]
     pub tile_size: u32,
+
+    /// Layer to prepare
+    #[arg(short, long = "layer-to-prepare", default_value = "0")]
+    pub layer_to_prepare: u32,
+    
 }

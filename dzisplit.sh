@@ -1,1 +1,1 @@
-cargo run -- dzi-split-mode -i  ~/Documents/Personal/mars-map-maxres.png -s mars-map-maxres -o ./split-output
+cargo run -- dzi-split-mode -i  ~/Documents/Personal/mars-map-maxres.png -s mars-map-maxres -o ./split-output -l 6

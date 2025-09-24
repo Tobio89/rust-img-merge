@@ -1,4 +1,4 @@
-use ril::Image;
+use ril::{Image, Rgba};
 use std::path::Path;
 use std::time::Instant;
 
@@ -23,7 +23,7 @@ pub fn do_dzi_split_mode(cli: app::DZISplitModeArgs) {
     println!("Loading image...");
     // get a time stamp of when this starts:
     let start_time = Instant::now();
-    let loaded_image: Image<ril::Rgba> = Image::open(cli.input_image).expect("Error loading image: ");
+    let loaded_image: Image<Rgba> = Image::open(cli.input_image).expect("Error loading image: ");
 
     let end_time = Instant::now();
     println!("Image loaded in {:?}", end_time.duration_since(start_time));
@@ -34,28 +34,26 @@ pub fn do_dzi_split_mode(cli: app::DZISplitModeArgs) {
     let tile_size = cli.tile_size;
     let output_folder = cli.output_folder;
     let output_file_stem = cli.output_file_stem;
+    let layer_to_prepare = cli.layer_to_prepare;
     
     
-    let width_left = width % tile_size;
-    let height_left = height % tile_size;
-    // let cols = {
-    //     if width % tile_size == 0 {
-    //         width / tile_size
-    //     } else {
-    //         width / tile_size + 1
-    //     }
-    // };
-    // let rows = {
-    //     if height % tile_size == 0 {
-    //         height / tile_size
-    //     } else {
-    //         height / tile_size + 1
-    //     }
-    // };
+    // let width_left = width % tile_size;
+    // let height_left = height % tile_size;
+    let cols = {
+        if width % tile_size == 0 {
+            width / tile_size
+        } else {
+            width / tile_size + 1
+        }
+    };
+    let rows = {
+        if height % tile_size == 0 {
+            height / tile_size
+        } else {
+            height / tile_size + 1
+        }
+    };
 
-    // For testing
-    let cols = 90;
-    let rows = 10;
 
     let dzi_dimensions = DZIDimensions {
         cols,
@@ -63,11 +61,13 @@ pub fn do_dzi_split_mode(cli: app::DZISplitModeArgs) {
         zoom_levels: calculate_zoom_levels(height, width, tile_size),
     };
 
-    println!("Preparing first layer...");
-    let start_time = Instant::now();
-    prepare_first_layer(&loaded_image, tile_size, &dzi_dimensions, &output_folder, &output_file_stem);
-    let end_time = Instant::now();
-    println!("First layer prepared in {:?}", end_time.duration_since(start_time));
+    if layer_to_prepare == 0 || layer_to_prepare == dzi_dimensions.zoom_levels {
+        println!("Preparing layer {}...", dzi_dimensions.zoom_levels);
+        let start_time = Instant::now();
+        prepare_first_layer(&loaded_image, tile_size, &dzi_dimensions, &output_folder, &output_file_stem);
+        let end_time = Instant::now();
+        println!("Layer {} prepared in {:?}", dzi_dimensions.zoom_levels, end_time.duration_since(start_time));
+    }
 
 
     /* 
@@ -85,6 +85,23 @@ pub fn do_dzi_split_mode(cli: app::DZISplitModeArgs) {
 
     */
 
+    let next_layer = dzi_dimensions.zoom_levels - 1;
+
+    // If 0, it's all layers. Else, do the target layer only
+    if layer_to_prepare == 0 || layer_to_prepare == next_layer {
+
+        // previous layer's dimensions, so we can get the tiles correctly
+        let layer_cols = dzi_dimensions.cols;
+        let layer_rows = dzi_dimensions.rows;
+
+        // just do one layer for testing
+        println!("Preparing scaled layer {}...", next_layer);
+        let start_time = Instant::now();
+        prepare_scaled_layer(next_layer, &output_file_stem, tile_size, &output_folder, layer_cols, layer_rows);
+        let end_time = Instant::now();
+        println!("Layer {} prepared in {:?}", next_layer, end_time.duration_since(start_time));
+
+    }
 }
 
 fn calculate_zoom_levels(height: u32, width: u32, tile_size: u32) -> u32 {
@@ -101,12 +118,12 @@ fn calculate_zoom_levels(height: u32, width: u32, tile_size: u32) -> u32 {
     return zoom_levels;
 }
 
-fn copy_pixels_to_tile(image: &Image<ril::Rgba>, tile_size: u32, x: u32, y: u32) -> Image<ril::Rgba> {
-    let mut tile = Image::new(tile_size, tile_size, ril::Rgba { r: 0, g: 0, b: 0, a: 0 });
+fn copy_pixels_to_tile(image: &Image<Rgba>, tile_size: u32, x: u32, y: u32) -> Image<Rgba> {
+    let mut tile = Image::new(tile_size, tile_size, Rgba { r: 0, g: 0, b: 0, a: 0 });
     for i in 0..tile_size {
         for j in 0..tile_size {
-            let mut new_pixel = ril::Rgba { r: 0, g: 0, b: 0, a: 0 };
-            let source_pixel = image.get_pixel(x + i, y + j).unwrap_or(&ril::Rgba { r: 0, g: 0, b: 0, a: 0 });
+            let mut new_pixel = Rgba { r: 0, g: 0, b: 0, a: 0 };
+            let source_pixel = image.get_pixel(x + i, y + j).unwrap_or(&Rgba { r: 0, g: 0, b: 0, a: 0 });
 
             new_pixel.r = source_pixel.r;
             new_pixel.g = source_pixel.g;
@@ -121,16 +138,53 @@ fn copy_pixels_to_tile(image: &Image<ril::Rgba>, tile_size: u32, x: u32, y: u32)
 
 fn get_file_name(x: u32, y: u32, z: u32, prefix: &str) -> String {
     if prefix.is_empty() {
-        return format!("{}_{}_{}", z, x, y);
+        return format!("{}_{}_{}", z, y, x);
     }
-    return format!("{}_{}_{}_{}", prefix, z, x, y);
+    return format!("{}_{}_{}_{}", prefix, z, y, x);
 }
 
-fn prepare_first_layer(image: &Image<ril::Rgba>, tile_size: u32, dzi_dimensions: &DZIDimensions, output_folder: &str, prefix: &str) -> (){
-    for i in 0..dzi_dimensions.rows {
-        for j in 0..dzi_dimensions.cols {
-            let tile = copy_pixels_to_tile(image, tile_size, j * tile_size, i * tile_size);
-            let file_name = get_file_name(i, j, dzi_dimensions.zoom_levels, prefix);
+fn prepare_first_layer(image: &Image<Rgba>, tile_size: u32, dzi_dimensions: &DZIDimensions, output_folder: &str, prefix: &str) -> (){
+    for y in 0..dzi_dimensions.rows{
+        for x in 0..dzi_dimensions.cols {
+            let tile = copy_pixels_to_tile(image, tile_size, x * tile_size, y * tile_size);
+            let file_name = get_file_name(x, y, dzi_dimensions.zoom_levels, prefix);
+            let output_file = format!("{}/{}.png", output_folder, file_name);
+            tile.save(ril::ImageFormat::Png, output_file).expect("Error saving image");
+        }
+    }
+}
+
+// Loads an image, or creates a blank, black image
+fn get_image_or_blank(level: u32, x:u32, y:u32, prefix: &str, tile_size: u32, output_folder:&str)-> Image<Rgba>{
+    let image_name = get_file_name(x, y, level, prefix);
+    let image_path = format!("{}/{}.png", output_folder, image_name);
+    let result:Image<Rgba> = Image::open(image_path).unwrap_or(Image::new(tile_size, tile_size, Rgba::black())); 
+    return result
+}
+
+// Loads four tiles, pastes them onto a new image, and returns it
+fn prepare_scaled_tile(level: u32, x:u32, y:u32, prefix: &str, tile_size:u32, output_folder:&str)-> Image<Rgba>{
+    let top_left = get_image_or_blank(level, x, y, prefix, tile_size, output_folder);
+    let top_right = get_image_or_blank(level, x+1, y, prefix, tile_size, output_folder);
+    let bottom_left = get_image_or_blank(level, x, y+1, prefix, tile_size, output_folder);
+    let bottom_right = get_image_or_blank(level, x+1, y+1, prefix, tile_size, output_folder);
+
+    let mut new_image = Image::new(tile_size*2, tile_size*2, Rgba::black());
+    new_image.paste(0, 0, &top_left);
+    new_image.paste(tile_size, 0, &top_right);
+    new_image.paste(0, tile_size, &bottom_left);
+    new_image.paste(tile_size, tile_size, &bottom_right);
+
+    new_image.resize(tile_size, tile_size, ril::ResizeAlgorithm::Nearest);
+    return new_image;
+}
+
+
+fn prepare_scaled_layer(level: u32, prefix: &str, tile_size: u32, output_folder: &str, layer_cols: u32, layer_rows: u32){
+    for y in (0..layer_rows).step_by(2) {
+        for x in (0..layer_cols).step_by(2) {
+            let tile = prepare_scaled_tile(level+1, x, y, prefix, tile_size, output_folder);
+            let file_name = get_file_name(x/2, y/2, level, prefix);
             let output_file = format!("{}/{}.png", output_folder, file_name);
             tile.save(ril::ImageFormat::Png, output_file).expect("Error saving image");
         }
