@@ -85,19 +85,15 @@ pub fn do_dzi_split_mode(cli: app::DZISplitModeArgs) {
 
     */
 
-    let mut next_layer = dzi_dimensions.zoom_levels - 1;
-
-
+    let mut layer_cols = dzi_dimensions.cols;
+    let mut layer_rows = dzi_dimensions.rows;
 
 
     // If 0, it's all layers. Else, do the target layer only
     if layer_to_prepare == 0 {
+        for i in 0..dzi_dimensions.zoom_levels {
+            let next_layer = dzi_dimensions.zoom_levels - i - 1;
 
-        // previous layer's dimensions, so we can get the tiles correctly
-        let mut layer_cols = dzi_dimensions.cols;
-        let mut layer_rows = dzi_dimensions.rows;
-
-        for i in (0..next_layer).rev() {
             // just do one layer for testing
             println!("Preparing scaled layer {}...", next_layer);
             let start_time = Instant::now();
@@ -105,14 +101,9 @@ pub fn do_dzi_split_mode(cli: app::DZISplitModeArgs) {
             let end_time = Instant::now();
             println!("Layer {} prepared in {:?}", next_layer, end_time.duration_since(start_time));
 
-            layer_cols = layer_cols.div_ceil(2);
-            layer_rows = layer_rows.div_ceil(2);
-            next_layer = i;
-
-            if layer_cols < 1 || layer_rows < 1{
-                println!("Layer {} is too small, stopping.", next_layer);
-                break;
-            }
+            // Update the layer dimensions for the next layer
+            layer_cols = dzi_dimensions.cols.div_ceil(2_u32.pow(i+1));
+            layer_rows = dzi_dimensions.rows.div_ceil(2_u32.pow(i+1));
         }
     }
 }
