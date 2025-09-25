@@ -3,3 +3,5 @@
 .DS_Store
 output.png
 output_*.png
+.DS_Store
+split-output/*
