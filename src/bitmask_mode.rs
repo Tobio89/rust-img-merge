@@ -27,6 +27,7 @@ pub enum CollapseColor {
 pub enum CollapseMode {
     Bitmask,
     Heatmap,
+    PassThrough,
     Skip,
 }
 
@@ -35,6 +36,7 @@ impl ValueEnum for CollapseMode {
         &[
             CollapseMode::Bitmask,
             CollapseMode::Heatmap,
+            CollapseMode::PassThrough,
             CollapseMode::Skip,
         ]
     }
@@ -42,6 +44,7 @@ impl ValueEnum for CollapseMode {
         match self {
             CollapseMode::Bitmask => Some(PossibleValue::new("bitmask")),
             CollapseMode::Heatmap => Some(PossibleValue::new("heatmap")),
+            CollapseMode::PassThrough => Some(PossibleValue::new("pass-through")),
             CollapseMode::Skip => Some(PossibleValue::new("skip")),
         }
     }
@@ -434,13 +437,13 @@ fn collapse_grey_to_color(
 
     match color {
         CollapseColor::Red => {
-            result.r = bit_ize_or_jet_ize(pixel.r, &config.red);
+            result.r = convert_color_value(pixel.r, &config.red);
         }
         CollapseColor::Green => {
-            result.g = bit_ize_or_jet_ize(pixel.g, &config.green);
+            result.g = convert_color_value(pixel.g, &config.green);
         }
         CollapseColor::Blue => {
-            result.b = bit_ize_or_jet_ize(pixel.b, &config.blue);
+            result.b = convert_color_value(pixel.b, &config.blue);
         }
     }
 
@@ -452,15 +455,20 @@ fn collapse_grey_to_color(
 /// # Bit-ize or jet-ize
 /// Given an 8-bit number and a CollapseMode, return a new 8-bit number.
 ///
-/// This function is used to convert an indexed colour to a bitmasked colour, or to leave it as a heatmap value.
-///
+/// This function is used to convert an indexed colour to a bitmasked colour.
+/// 
+/// It can also pass the value through unchanged, in case of heatmap, or pass through.
+/// 
 /// It can also skip the value entirely by returning 0.
-fn bit_ize_or_jet_ize(value: u8, mode: &CollapseMode) -> u8 {
+fn convert_color_value(value: u8, mode: &CollapseMode) -> u8 {
     match mode {
         CollapseMode::Bitmask => {
             return bit_ize(value);
         }
         CollapseMode::Heatmap => {
+            return value;
+        }
+        CollapseMode::PassThrough => {
             return value;
         }
         CollapseMode::Skip => {
