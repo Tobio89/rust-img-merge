@@ -1,6 +1,8 @@
 use ril::{Image, Rgba};
 use std::path::Path;
 use std::time::Instant;
+use std::fs::File;
+use std::io::Write;
 
 use crate::app;
 
@@ -35,6 +37,7 @@ pub fn do_dzi_split_mode(cli: app::DZISplitModeArgs) {
     let output_folder = cli.output_folder;
     let output_file_stem = cli.output_file_stem;
     let layer_to_prepare = cli.layer_to_prepare;
+    let should_generate_metadata_file = cli.generate_metadata_file;
     
     
     // let width_left = width % tile_size;
@@ -105,7 +108,13 @@ pub fn do_dzi_split_mode(cli: app::DZISplitModeArgs) {
             layer_cols = dzi_dimensions.cols.div_ceil(2_u32.pow(i+1));
             layer_rows = dzi_dimensions.rows.div_ceil(2_u32.pow(i+1));
         }
+
+        if should_generate_metadata_file {
+            generate_metadata_file(tile_size, 0, 0, dzi_dimensions.zoom_levels, width, height, &output_folder);
+        }
     }
+
+
 }
 
 fn calculate_zoom_levels(height: u32, width: u32, tile_size: u32) -> u32 {
@@ -194,6 +203,17 @@ fn prepare_scaled_layer(level: u32, prefix: &str, tile_size: u32, output_folder:
         }
     }
 }
+
+
+fn generate_metadata_file(tile_size: u32, overlap: u32, min_level: u32, max_level: u32, width: u32, height: u32, output_folder: &str){
+    let metadata_file = format!("{}/metadata.xml", output_folder);
+    let mut file = File::create(metadata_file).expect("Error creating metadata file");
+    file.write_all(format!("<Image TileSize=\"{}\" Overlap=\"{}\" Format=\"png\" MinLevel=\"{}\" MaxLevel=\"{}\" xmlns=\"http://schemas.microsoft.com/deepzoom/2008\"><Size Width=\"{}\" Height=\"{}\" /></Image>", tile_size, overlap, min_level, max_level, width, height).as_bytes()).expect("Error writing metadata to file");
+}
+/* 
+Example metadata file:
+<Image TileSize="256" Overlap="0" Format="png" MinLevel="0" MaxLevel="7" xmlns="http://schemas.microsoft.com/deepzoom/2008"><Size Width="23039" Height="13325" /></Image>
+*/
 
 
 /* 
