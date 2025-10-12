@@ -1,1 +1,2 @@
-cargo run -- dzi-split-mode -i  ~/Documents/Personal/mars-map-maxres.png -s mars-map-maxres -o ./split-output -l 0
+# cargo run -- dzi-split-mode -i  ~/Documents/Personal/mars-map-maxres.png -s mars-map-maxres -o ./split-output -l 0
+cargo run -- dzi-split-mode -i  ./mars-d4-ann.png -s mars-d4-annotated -o ./mars-d4-annotations-split -l 0
