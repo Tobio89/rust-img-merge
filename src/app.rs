@@ -1,6 +1,8 @@
 use clap::{command, Parser, Subcommand};
 
 use crate::bitmask_mode::CollapseMode;
+use crate::one_bit_collapse_mode::OneBitDestinationChannel;
+
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -14,6 +16,7 @@ pub struct Cli {
 pub enum Commands {
     BitmaskMode(BitmaskModeArgs),
     DZISplitMode(DZISplitModeArgs),
+    OneBitCollapseMode(OneBitCollapseModeArgs),
 }
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -57,6 +60,34 @@ pub struct BitmaskModeArgs {
     #[arg(short, long = "out", default_value = "./output.png", required = true)]
     pub output_file: String,
 }
+
+
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+#[command(propagate_version = true)]
+/// One Bit Collapse Mode.
+/// This mode collapses multiple images into a single channel of a PNG.
+/// The images are assumed to be the same size.
+/// The images are assumed to be 1 bit:
+/// A black pixel is ignored.
+/// Any other colour is assumed to be 1 for that image.
+pub struct OneBitCollapseModeArgs {
+    /// Do not write any images
+    #[arg(short, long = "dry-run", value_parser, default_value = "false")]
+    pub dry_run: bool,
+    
+    /// Destination channel to collapse to
+    #[arg(long = "destination-channel", value_enum, default_value = "red")]
+    pub destination_channel: OneBitDestinationChannel,
+
+    #[arg(short, long = "out", default_value = "./output.png", required = true)]
+    pub output_file: String,
+
+    /// Paths to source images, between 1 and 8
+    #[arg(short, long = "source-image-paths", num_args = 1..=8)]
+    pub source_image_paths: Vec<String>,
+}
+
 
 
 #[derive(Parser)]
