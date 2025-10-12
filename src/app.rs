@@ -65,6 +65,12 @@ pub struct BitmaskModeArgs {
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 #[command(propagate_version = true)]
+/// One Bit Collapse Mode.
+/// This mode collapses multiple images into a single channel of a PNG.
+/// The images are assumed to be the same size.
+/// The images are assumed to be 1 bit:
+/// A black pixel is ignored.
+/// Any other colour is assumed to be 1 for that image.
 pub struct OneBitCollapseModeArgs {
     /// Do not write any images
     #[arg(short, long = "dry-run", value_parser, default_value = "false")]
