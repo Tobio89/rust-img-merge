@@ -14,9 +14,7 @@ pub struct Cli {
 pub enum Commands {
     BitmaskMode(BitmaskModeArgs),
     DZISplitMode(DZISplitModeArgs),
-    ScaleImageMode(ScaleImageModeArgs),
 }
-
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 #[command(propagate_version = true)]
@@ -89,17 +87,5 @@ pub struct DZISplitModeArgs {
     /// Generate metadata file
     #[arg(short, long = "generate-metadata-file", default_value = "true")]
     pub generate_metadata_file: bool,
-    
-}
-
-
-#[derive(Parser)]
-#[command(version, about, long_about = None)]
-#[command(propagate_version = true)]
-pub struct ScaleImageModeArgs {
-
-    /// Path to source image
-    #[arg(short, long = "input-image", required = true)]
-    pub input_image: String,
     
 }
