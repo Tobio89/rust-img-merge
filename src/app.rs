@@ -115,6 +115,10 @@ pub struct DZISplitModeArgs {
     #[arg(short, long = "layer-to-prepare", default_value = "0")]
     pub layer_to_prepare: u32,
 
+    /// Apply bilinear filtering or not
+    #[arg(short='f', long = "filter-smoothing", default_value = "false")]
+    pub filter_smoothing: bool,
+
     /// Generate metadata file
     #[arg(short, long = "generate-metadata-file", default_value = "true")]
     pub generate_metadata_file: bool,

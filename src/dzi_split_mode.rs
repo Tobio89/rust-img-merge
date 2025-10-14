@@ -22,6 +22,12 @@ pub fn do_dzi_split_mode(cli: app::DZISplitModeArgs) {
         panic!("Input image does not exist.");
     }
 
+    if cli.filter_smoothing {
+        println!("Using bilinear scaling algorithm...");
+    } else {
+        println!("Using nearest neighbor scaling algorithm...");
+    }
+
     println!("Loading image...");
     // get a time stamp of when this starts:
     let start_time = Instant::now();
@@ -38,6 +44,7 @@ pub fn do_dzi_split_mode(cli: app::DZISplitModeArgs) {
     let output_file_stem = cli.output_file_stem;
     let layer_to_prepare = cli.layer_to_prepare;
     let should_generate_metadata_file = cli.generate_metadata_file;
+    let should_use_bilinear_filtering = cli.filter_smoothing;
     
     
     // let width_left = width % tile_size;
@@ -100,7 +107,7 @@ pub fn do_dzi_split_mode(cli: app::DZISplitModeArgs) {
             // just do one layer for testing
             println!("Preparing scaled layer {}...", next_layer);
             let start_time = Instant::now();
-            prepare_scaled_layer(next_layer, &output_file_stem, tile_size, &output_folder, layer_cols, layer_rows);
+            prepare_scaled_layer(next_layer, &output_file_stem, tile_size, &output_folder, layer_cols, layer_rows, should_use_bilinear_filtering);
             let end_time = Instant::now();
             println!("Layer {} prepared in {:?}", next_layer, end_time.duration_since(start_time));
 
@@ -176,7 +183,7 @@ fn get_image_or_blank(level: u32, x:u32, y:u32, prefix: &str, tile_size: u32, ou
 }
 
 // Loads four tiles, pastes them onto a new image, and returns it
-fn prepare_scaled_tile(level: u32, x:u32, y:u32, prefix: &str, tile_size:u32, output_folder:&str)-> Image<Rgba>{
+fn prepare_scaled_tile(level: u32, x:u32, y:u32, prefix: &str, tile_size:u32, output_folder:&str, should_use_bilinear_filtering: bool)-> Image<Rgba>{
     let top_left = get_image_or_blank(level, x, y, prefix, tile_size, output_folder);
     let top_right = get_image_or_blank(level, x+1, y, prefix, tile_size, output_folder);
     let bottom_left = get_image_or_blank(level, x, y+1, prefix, tile_size, output_folder);
@@ -188,15 +195,22 @@ fn prepare_scaled_tile(level: u32, x:u32, y:u32, prefix: &str, tile_size:u32, ou
     new_image.paste(0, tile_size, &bottom_left);
     new_image.paste(tile_size, tile_size, &bottom_right);
 
-    new_image.resize(tile_size, tile_size, ril::ResizeAlgorithm::Bilinear);
+    let resize_algorithm = if should_use_bilinear_filtering {
+        ril::ResizeAlgorithm::Bilinear
+    } else {
+        ril::ResizeAlgorithm::Nearest
+    };
+
+
+    new_image.resize(tile_size, tile_size, resize_algorithm);
     return new_image;
 }
 
 
-fn prepare_scaled_layer(level: u32, prefix: &str, tile_size: u32, output_folder: &str, layer_cols: u32, layer_rows: u32){
+fn prepare_scaled_layer(level: u32, prefix: &str, tile_size: u32, output_folder: &str, layer_cols: u32, layer_rows: u32, should_use_bilinear_filtering: bool){
     for y in (0..layer_rows).step_by(2) {
         for x in (0..layer_cols).step_by(2) {
-            let tile = prepare_scaled_tile(level+1, x, y, prefix, tile_size, output_folder);
+            let tile = prepare_scaled_tile(level+1, x, y, prefix, tile_size, output_folder, should_use_bilinear_filtering);
             let file_name = get_file_name(x/2, y/2, level, prefix);
             let output_file = format!("{}/{}.png", output_folder, file_name);
             tile.save(ril::ImageFormat::Png, output_file).expect("Error saving image");
